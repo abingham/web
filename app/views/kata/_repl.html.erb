@@ -1,0 +1,91 @@
+<div id="repl-section">
+    <div id="repl-terminal-container" >
+    </div>
+    <button type="button"
+            id="restart-repl"
+            title="(re)starts the REPL">
+       start repl
+    </button>
+
+</div>
+
+<script type="text/javascript">
+
+$(function() {
+     var terminalContainer = document.getElementById('repl-terminal-container') ;
+
+     Terminal.applyAddon(attach);
+     Terminal.applyAddon(fit);
+     Terminal.applyAddon(fullscreen);
+     Terminal.applyAddon(search);
+     Terminal.applyAddon(winptyCompat);
+
+     var term = new Terminal({
+         cursorBlink: true, // optionElements.cursorBlink.checked,
+         scrollback: 10, // parseInt(optionElements.scrollback.value, 10),
+         tabStopWidth: 10 // parseInt(optionElements.tabstopwidth.value, 10)
+     });
+
+     window.term = term;
+     term.open(terminalContainer);
+     term.winptyCompatInit();
+     term.fit();
+     term.focus();
+
+     var avatarName = "<%= @avatar.name %>";
+     var kataId = "<%= @kata.id %>";
+
+     var urlId = kataId + '/' + avatarName;
+     var replURL = 'http://' + location.hostname + '/repl/' + urlId;
+     var socketURL = 'ws://' + location.hostname + '/repl_ws/' + urlId;
+     var socket = null;
+
+     var destroyRepl = function() {
+         if (socket) {
+             term.detach(socket);
+             socket = null;
+
+             term.clear();
+
+             return fetch(replURL, {method: 'DELETE'});
+         }
+         else {
+             return Promise.resolve();
+         }
+     };
+
+     var createRepl = function() {
+         if (!socket) {
+             return fetch(replURL, {method: 'POST'}).then(function (res) {
+                 res.text().then(function (processId) {
+                     /* pid = processId;
+                      * socketURL += processId;*/
+                     socket = new WebSocket(socketURL);
+                     socket.onopen = function() {
+                         term.attach(socket);
+                         term._initialize = true;
+                     }
+                 });
+             });
+         }
+         else {
+             return Promise.resolve();
+         }
+     };
+
+     $('#restart-repl').click(function() {
+         destroyRepl().then(createRepl);
+     });
+
+     createRepl();
+
+     /* var avatarName = "<%= @avatar.name %>";
+
+      * var replButtons = $('#repl-operations');
+
+      * replButtons.find('#restart-repl').click(function() {
+      *     openRepl(avatarName);
+      * });*/
+ });
+
+</script>
