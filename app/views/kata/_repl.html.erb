@@ -2,9 +2,9 @@
     <div id="repl-terminal-container" >
     </div>
     <button type="button"
-            id="restart-repl"
+            id="restart-repl-button"
             title="(re)starts the REPL">
-       start repl
+       Restart REPL
     </button>
 
 </div>
@@ -35,13 +35,41 @@ $(function() {
      var avatarName = "<%= @avatar.name %>";
      var kataId = "<%= @kata.id %>";
 
+     var restartReplButton = $("#restart-repl-button");
+
      var urlId = kataId + '/' + avatarName;
      var replURL = 'http://' + location.hostname + '/repl/' + urlId;
      var socketURL = 'ws://' + location.hostname + '/repl_ws/' + urlId;
      var socket = null;
 
+     var resetSocket = function() {
+         socket = new WebSocket(socketURL);
+
+         socket.onopen = function(event) {
+             console.log('socket opened');
+             term.attach(socket);
+             term._initialize = true;
+         };
+
+         socket.onclose = function(event) {
+             console.log('socket closed');
+             console.log('received close event');
+             console.log(event);
+
+             term.detach(socket);
+
+             resetSocket();
+         };
+
+         socket.onerror = function(event) {
+             console.log('socket error');
+             console.log(event);
+         };
+     };
+
      var destroyRepl = function() {
          if (socket) {
+             console.log('destroying repl');
              term.detach(socket);
              socket = null;
 
@@ -55,37 +83,34 @@ $(function() {
      };
 
      var createRepl = function() {
+         var form = restartReplButton.closest('form');
+
          if (!socket) {
-             return fetch(replURL, {method: 'POST'}).then(function (res) {
-                 res.text().then(function (processId) {
-                     /* pid = processId;
-                      * socketURL += processId;*/
-                     socket = new WebSocket(socketURL);
-                     socket.onopen = function() {
-                         term.attach(socket);
-                         term._initialize = true;
-                     }
-                 });
-             });
+             console.log('creating repl');
+
+             cd.saveCodeFromSyntaxHighlightEditors();
+             cd.storeOutgoingFileHashes();  // TODO: Necessary?
+
+             var requestParams = {
+                 method: 'POST',
+                 body: JSON.stringify(form.serializeArray()),
+                 headers: {
+                     'content-type': 'application/json'
+                 }};
+             return fetch(replURL, requestParams).then(resetSocket);
          }
          else {
              return Promise.resolve();
          }
      };
 
-     $('#restart-repl').click(function() {
+     restartReplButton.click(function() {
          destroyRepl().then(createRepl);
      });
 
      createRepl();
 
-     /* var avatarName = "<%= @avatar.name %>";
-
-      * var replButtons = $('#repl-operations');
-
-      * replButtons.find('#restart-repl').click(function() {
-      *     openRepl(avatarName);
-      * });*/
+     // TODO: How can we arrange for destroyRepl() to be called when the page closes?
  });
 
 </script>
