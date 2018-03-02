@@ -64,6 +64,7 @@ $(function() {
          socket.onerror = function(event) {
              console.log('socket error');
              console.log(event);
+             term.writeln('Error connecting to REPL');
          };
      };
 
@@ -73,7 +74,7 @@ $(function() {
              term.detach(socket);
              socket = null;
 
-             term.clear();
+             term.writeln('\n\r\033[31mREPL disconnected\033[0m');
 
              return fetch(replURL, {method: 'DELETE'});
          }
@@ -86,6 +87,8 @@ $(function() {
          var form = restartReplButton.closest('form');
 
          if (!socket) {
+             term.writeln('\033[32mConnecting to REPL\033[0m');
+
              console.log('creating repl');
 
              cd.saveCodeFromSyntaxHighlightEditors();
