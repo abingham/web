@@ -12,6 +12,43 @@
 <script type="text/javascript">
 
 $(function() {
+     function SocketManager(url, terminal) {
+         this.socket = null;
+
+         this.start(url, terminal);
+     };
+
+     SocketManager.prototype.start = function(url, terminal) {
+         var that = this;
+
+         this.socket = new WebSocket(url);
+
+         this.socket.onopen = function(event) {
+             console.log('socket opened');
+             terminal.attach(that.socket);
+             terminal._initialize = true;
+         };
+
+         this.socket.onclose = function(event) {
+             console.log('socket closed');
+             terminal.detach(that.socket);
+
+             // If the close corresponds to nginx timing out the socket, then
+             // restart it silently.
+             if (event.code == 1006) {
+                 that.start(url, terminal);
+             }
+         };
+
+         this.socket.onerror = function(event) {
+             terminal.writeln('Error connecting to REPL');
+         };
+     };
+
+     SocketManager.prototype.close = function() {
+         this.socket.close(1000, "User requested new REPL");
+     };
+
      var terminalContainer = document.getElementById('repl-terminal-container') ;
 
      Terminal.applyAddon(attach);
@@ -42,76 +79,44 @@ $(function() {
      var socketURL = 'ws://' + location.hostname + '/repl_ws/' + urlId;
      var socket = null;
 
-     var resetSocket = function() {
-         socket = new WebSocket(socketURL);
-
-         socket.onopen = function(event) {
-             console.log('socket opened');
-             term.attach(socket);
-             term._initialize = true;
-         };
-
-         socket.onclose = function(event) {
-             console.log('socket closed');
-             console.log('received close event');
-             console.log(event);
-
-             term.detach(socket);
-
-             resetSocket();
-         };
-
-         socket.onerror = function(event) {
-             console.log('socket error');
-             console.log(event);
-             term.writeln('Error connecting to REPL');
-         };
-     };
-
      var destroyRepl = function() {
-         if (socket) {
-             console.log('destroying repl');
-             term.detach(socket);
-             socket = null;
-
-             term.writeln('\n\r\033[31mREPL disconnected\033[0m');
-
-             return fetch(replURL, {method: 'DELETE'});
-         }
-         else {
-             return Promise.resolve();
-         }
+           console.log('destroying repl');
+           term.writeln('\n\r\033[31mREPL disconnected\033[0m');
+           return fetch(replURL, {method: 'DELETE'});
      };
 
      var createRepl = function() {
          var form = restartReplButton.closest('form');
 
-         if (!socket) {
-             term.writeln('\033[32mConnecting to REPL\033[0m');
+         term.writeln('\033[32mConnecting to REPL\033[0m');
 
-             console.log('creating repl');
+         console.log('creating repl');
 
-             cd.saveCodeFromSyntaxHighlightEditors();
-             cd.storeOutgoingFileHashes();  // TODO: Necessary?
+         cd.saveCodeFromSyntaxHighlightEditors();
+         cd.storeOutgoingFileHashes();  // TODO: Necessary?
 
-             var requestParams = {
-                 method: 'POST',
-                 body: JSON.stringify(form.serializeArray()),
-                 headers: {
-                     'content-type': 'application/json'
-                 }};
-             return fetch(replURL, requestParams).then(resetSocket);
-         }
-         else {
-             return Promise.resolve();
-         }
+         var requestParams = {
+             method: 'POST',
+             body: JSON.stringify(form.serializeArray()),
+             headers: {
+                 'content-type': 'application/json'
+             }};
+         return fetch(replURL, requestParams);
      };
 
-     restartReplButton.click(function() {
-         destroyRepl().then(createRepl);
+     createRepl().then(function() {
+         socket = new SocketManager(socketURL, term);
      });
 
-     createRepl();
+     restartReplButton.click(function() {
+         socket.close();
+         socket = null;
+         destroyRepl()
+             .then(createRepl)
+             .then(function() {
+                 socket = new SocketManager(socketURL, term);
+             });
+     });
 
      // TODO: How can we arrange for destroyRepl() to be called when the page closes?
  });
