@@ -12,13 +12,15 @@
 <script type="text/javascript">
 
 $(function() {
-     function SocketManager(url, terminal) {
+     /* SocketMonitor watches the websocket that we use to talk to the server.
+        If it goes down outside of our control, it silently re-opens the socket.
+      */
+     function SocketMonitor(url, terminal) {
          this.socket = null;
-
          this.start(url, terminal);
      };
 
-     SocketManager.prototype.start = function(url, terminal) {
+     SocketMonitor.prototype.start = function(url, terminal) {
          var that = this;
 
          this.socket = new WebSocket(url);
@@ -45,10 +47,12 @@ $(function() {
          };
      };
 
-     SocketManager.prototype.close = function() {
+     SocketMonitor.prototype.close = function() {
          this.socket.close(1000, "User requested new REPL");
      };
 
+
+     // Create and configure the terminal
      var terminalContainer = document.getElementById('repl-terminal-container') ;
 
      Terminal.applyAddon(attach);
@@ -77,14 +81,20 @@ $(function() {
      var urlId = kataId + '/' + avatarName;
      var replURL = 'http://' + location.hostname + '/repl/' + urlId;
      var socketURL = 'ws://' + location.hostname + '/repl_ws/' + urlId;
+
+     // The SocketMonitor for talking with the REPL on the server.
      var socket = null;
 
+     // Request that the REPL be terminated.
+     // Returns the promise for the DELETE request.
      var destroyRepl = function() {
            console.log('destroying repl');
            term.writeln('\n\r\033[31mREPL disconnected\033[0m');
            return fetch(replURL, {method: 'DELETE'});
      };
 
+     // Request that a REPL be created.
+     // Returns the promise for the POST request.
      var createRepl = function() {
          var form = restartReplButton.closest('form');
 
@@ -104,17 +114,20 @@ $(function() {
          return fetch(replURL, requestParams);
      };
 
+     // At startup, we create a REPL and websocket(monitor) to talk to it.
      createRepl().then(function() {
-         socket = new SocketManager(socketURL, term);
+         socket = new SocketMonitor(socketURL, term);
      });
 
+     // To restart a repl, close the socket, delete the REPL, start a new REPL,
+     // and start a new socket.
      restartReplButton.click(function() {
          socket.close();
          socket = null;
          destroyRepl()
              .then(createRepl)
              .then(function() {
-                 socket = new SocketManager(socketURL, term);
+                 socket = new SocketMonitor(socketURL, term);
              });
      });
 
