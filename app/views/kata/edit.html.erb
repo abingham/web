@@ -59,12 +59,14 @@ $(function() {
           <%= render partial: 'editor' %>
         </td>
       </tr>
+      <% if @kata.display_name.start_with?("Python") %>
       <tr>
         <td></td>
         <td>
           <%= render partial: 'repl' %>
         </td>
       </tr>
+      <% end %>
     </table>
   </div>
 
